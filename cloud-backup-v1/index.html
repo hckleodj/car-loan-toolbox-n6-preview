@@ -62,7 +62,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   </nav>
   <div class="backup-reminder" id="backup-reminder" hidden><span>数据已变更，请下载完整 JSON 备份。</span><button type="button" id="backup-reminder-action">立即备份</button></div>
   <div class="data-safety safety-status" id="backup-safety-status"><strong id="backup-safety-title">数据安全 · 正在检查</strong><span id="backup-safety-detail">正在核对本地备份状态。</span></div>
-  <div class="wechat-notice" id="wechat-notice" hidden><strong>当前在微信内打开</strong>微信可能限制文件下载，并且网页缓存可能被微信清理。正式客户数据建议使用手机系统浏览器管理。请通过微信右上角菜单选择“在浏览器打开”。<button type="button" id="open-migration-export">迁移到系统浏览器</button></div>
+  <div class="wechat-notice" id="wechat-notice" hidden><strong>当前在微信内打开</strong>微信可能限制文件下载，并且网页缓存可能被微信清理。正式客户数据建议使用手机系统浏览器管理。请通过微信右上角菜单选择“在浏览器打开”。</div>
   <details class="data-safety data-safety-help"><summary>本机数据 · 备份与使用说明</summary><p>正式经营数据请固定在 OPPO 系统浏览器中使用。当前数据只保存在本设备当前浏览器；换浏览器或清理数据后不会自动同步。请定期下载完整 JSON 备份。</p></details>
   <div class="recovery-alert" id="recovery-alert" hidden><strong>客户数据保护已启动</strong><span id="recovery-alert-message">系统已停止写入，请先检查并备份原始数据。</span><button type="button" id="open-storage-diagnostics">立即检查原始数据</button></div>
 
@@ -84,8 +84,8 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   </div>
 
   <div class="panel" id="settings-panel"><section>
-    <h2 class="section-title">更多 / 设置</h2><p class="section-help">备份、恢复、本地历史快照和数据迁移集中在这里。</p>
-    <button type="button" id="open-backup">数据备份 / 恢复 / 历史快照</button><button type="button" class="secondary" id="settings-migration">数据迁移</button>
+    <h2 class="section-title">更多 / 设置</h2><p class="section-help">自动云备份、完整 JSON 备份与恢复、本地历史快照集中在这里。</p>
+    <button type="button" id="open-backup">数据备份 / 恢复 / 历史快照</button>
     <h3>收款渠道默认手续费率</h3><p class="note">以百分比填写；留空代表未配置。仅供新收款计算，不重算历史手续费。现金类固定为 0。单笔可人工填写实际手续费。</p>
     <form id="channel-settings-form"><div class="inputs"><div class="field"><label for="channel-rate-ccb">建行收款码默认费率（%）</label><input id="channel-rate-ccb" type="number" min="0" max="100" step="any" placeholder="未配置"></div><div class="field"><label for="channel-rate-wechat">微信经营收款默认费率（%）</label><input id="channel-rate-wechat" type="number" min="0" max="100" step="any" placeholder="未配置"></div></div><button type="submit">保存费率设置</button><p class="note" id="channel-settings-status"></p></form>
   </section></div>
@@ -290,13 +290,13 @@ window.testingSessionStorage=scoped(window.sessionStorage);
         <button type="button" id="export-backup">立即下载完整备份</button>
       </div>
       <div class="backup-confirm-step" id="backup-confirm-step" hidden>请确认备份文件已经保存到手机“文件管理 / 下载”。<button type="button" id="confirm-backup-saved">我已确认备份文件已保存</button></div>
-      <p class="backup-status" id="backup-status">备份和恢复都只在当前设备处理，不会上传客户数据。</p>
+      <p class="backup-status" id="backup-status">人工文件备份需确认真实落盘；云备份状态在上方单独显示。</p>
       <p class="backup-warning">备份文件包含客户、车辆及收款记录，请妥善保管，不要发送给无关人员。</p>
       <div class="backup-divider"></div>
-      <div class="backup-actions"><button class="secondary" type="button" id="import-backup">导入旧版或完整 JSON 备份</button><button class="secondary" type="button" id="open-migration-import">导入微信旧数据</button></div>
+      <div class="backup-actions"><button class="secondary" type="button" id="import-backup">从 JSON 文件恢复</button></div>
+      <details class="desktop-guide"><summary>恢复历史分段文件（仅兼容旧资料）</summary><p>仅用于读取以前保存的 DJINMIG1 / DJINMIG2 分段，不再生成新的分段备份。</p><button class="secondary" type="button" id="open-migration-import">恢复历史分段文件</button></details>
       <input id="backup-file" type="file" accept=".json,application/json" hidden>
       <details class="desktop-guide"><summary>添加到 OPPO 手机桌面</summary><p>请使用 OPPO 浏览器菜单中的“添加到桌面”或“添加至主屏幕”。是否显示该入口取决于当前 ColorOS 和浏览器版本。</p></details>
-      <details class="desktop-guide"><summary>其他备份方式</summary><p>微信无法下载文件时，可使用“分段文本应急备份”。它仅用于一次性迁移或紧急导出，不作为日常备份。</p><button class="secondary" type="button" id="open-emergency-segments">分段文本应急备份</button></details>
       <div class="backup-divider"></div>
       <button class="secondary" type="button" id="open-local-snapshots">本地历史版本</button>
       <p class="backup-warning">本地历史版本仅用于误删、误改时的应急恢复，与当前浏览器处于同一存储环境，不能替代外部备份。</p>
@@ -356,27 +356,16 @@ window.testingSessionStorage=scoped(window.sessionStorage);
     <div class="dialog-actions"><button class="secondary" type="button" id="close-recovery">关闭</button></div>
   </div>
 </dialog>
-<dialog id="migration-export-dialog">
-  <div class="dialog-body">
-    <h2 id="migration-export-title">迁移到系统浏览器</h2>
-    <p class="dialog-context">这是微信旧数据的一次性迁移流程。每段需要分别复制并暂存到微信文件传输助手或电脑，不能一次复制全部。</p>
-    <div class="migration-progress" id="migration-export-progress">尚未生成迁移分段</div>
-    <textarea class="migration-segment" id="migration-segment-text" readonly aria-label="当前迁移分段"></textarea>
-    <div class="migration-controls"><button class="secondary" type="button" id="previous-migration-segment">上一段</button><button type="button" id="copy-migration-segment">复制本段</button><button class="secondary" type="button" id="next-migration-segment">下一段</button></div>
-    <p class="backup-status" id="migration-export-status">生成后将显示迁移数据总段数。</p>
-    <div class="dialog-actions"><button class="secondary" type="button" id="close-migration-export">关闭</button></div>
-  </div>
-</dialog>
 <dialog id="migration-import-dialog">
   <div class="dialog-body">
-    <h2>导入微信旧数据</h2>
+    <h2>恢复历史分段文件</h2>
     <p class="dialog-context">可以一次粘贴一段或多段，顺序可以打乱。系统会逐段校验，全部完整后才允许导入。</p>
     <textarea class="backup-textarea" id="migration-import-text" placeholder="粘贴一个或多个迁移分段"></textarea>
     <button type="button" id="add-migration-segments">加入这些分段</button>
     <div class="migration-progress" id="migration-import-progress">已收到 0 / ? 段</div>
     <p class="backup-status" id="migration-import-status">等待迁移分段。</p>
     <div class="migration-summary" id="migration-preview" hidden></div>
-    <button type="button" id="confirm-migration-import" hidden>确认导入微信旧数据</button>
+    <button type="button" id="confirm-migration-import" hidden>确认恢复历史分段</button>
     <button class="secondary" type="button" id="clear-migration-import">清空已接收分段</button>
     <div class="migration-complete" id="migration-complete" hidden><strong>迁移完成，请立即下载第一份完整基准备份。</strong><span>下载后请到 OPPO 文件管理确认文件存在，再返回完成确认。</span><button type="button" id="download-baseline-backup">下载完整 JSON 基准备份</button><button class="secondary" type="button" id="confirm-baseline-saved" hidden>我已确认基准备份已保存</button><p class="backup-status" id="migration-complete-status"></p></div>
     <div class="dialog-actions"><button class="secondary" type="button" id="close-migration-import">关闭</button></div>
@@ -436,7 +425,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   const backupStateManager=new window.DajinBackupState.BackupStateManager({storage:testingLocalStorage});
   const localSnapshotManager=window.DajinLocalSnapshots?.LocalSnapshotManager?new window.DajinLocalSnapshots.LocalSnapshotManager({storage:testingLocalStorage,hashText:window.DajinBackupState.sha256Text}):null;
   let businessChangePending=Promise.resolve(),activeBackupSession=null,selectedSnapshot=null,backupBlockTimer=null;
-  let activeMigrationExport=null,migrationImportSegments=[],validatedMigration=null,migrationBaselinePending=false;
+  let migrationImportSegments=[],validatedMigration=null,migrationBaselinePending=false;
   backupStateManager.onChange=()=>{renderBackupReminder();refreshBackupAccess()};
   const backupStateReady=backupStateManager.initialize(planStorageState.raw);
 
@@ -666,7 +655,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   async function exportBackup(options={}){
     let artifact;try{artifact=await createBackupArtifact('json-download')}catch(error){setBackupStatus(error.message,true);return false}
     try{triggerJsonDownload(artifact.compactJson,backupFileName(artifact.date,options.baseline?'大进车贷助手基准备份':'大进车贷助手备份'))}
-    catch(error){activeBackupSession=null;setBackupStatus(`${error.message} 请使用分段文本应急备份。`,true);return false}
+    catch(error){activeBackupSession=null;setBackupStatus(`${error.message} 请检查浏览器下载权限后重试，或下载已校验的云端完整快照。`,true);return false}
     if(options.baseline){migrationBaselinePending=true;$('confirm-baseline-saved').hidden=false;$('migration-complete-status').textContent='已触发基准备份下载，请先到文件管理确认文件存在。'}
     else showBackupConfirmationStep();
     setBackupStatus(`已触发完整 JSON 下载，共 ${plans.length} 位客户。下载不代表备份完成，请到文件管理确认。`);return true;
@@ -696,28 +685,6 @@ window.testingSessionStorage=scoped(window.sessionStorage);
     const value=backupPayload(date,sourcePlans,state.dataRevision,fullChecksum),compactJson=JSON.stringify(value);
     return window.DajinMigrationTransfer.buildMigrationSegments({compactJson,dataRevision:state.dataRevision,fullChecksum,maxSegmentChars:3900,date,hashText:window.DajinBackupState.sha256Text});
   }
-  function renderMigrationExport(){
-    if(!activeMigrationExport)return;
-    const segment=activeMigrationExport.segments[activeMigrationExport.index],copied=activeMigrationExport.copied.size,total=activeMigrationExport.segments.length;
-    $('migration-segment-text').value=segment.text;$('migration-export-progress').textContent=`第 ${segment.segmentIndex}/${total} 段 · ${segment.textChars}字符 · 已执行复制 ${copied}/${total}`;
-    $('previous-migration-segment').disabled=activeMigrationExport.index===0;$('next-migration-segment').disabled=activeMigrationExport.index===total-1;
-    $('migration-export-status').textContent=copied===total?'全部分段都执行过复制。请确认已逐段粘贴保存，再到 OPPO 浏览器导入。':'请将每一段分别粘贴保存到微信文件传输助手或电脑。复制不代表已安全保存。';
-  }
-  async function startMigrationExport(emergency=false){
-    let built;try{built=await createMigrationArtifact()}catch(error){setBackupStatus(error.message,true);return false}
-    if(built.segments.some(segment=>segment.textChars>4000)){setBackupStatus('程序错误：存在超过4000字符的迁移分段，已禁止生成本次迁移。',true);return false}
-    activeMigrationExport={segments:built.segments,index:0,copied:new Set()};
-    $('migration-export-title').textContent=emergency?'分段文本应急备份':'迁移到系统浏览器';
-    renderMigrationExport();if($('backup-dialog').open)$('backup-dialog').close();const dialog=$('migration-export-dialog');if(!dialog.open)dialog.showModal();return true;
-  }
-  function markMigrationSegmentCopied(){if(!activeMigrationExport)return;activeMigrationExport.copied.add(activeMigrationExport.segments[activeMigrationExport.index].segmentIndex);renderMigrationExport()}
-  async function copyCurrentMigrationSegment(){
-    if(!activeMigrationExport)return;const text=activeMigrationExport.segments[activeMigrationExport.index].text,box=$('migration-segment-text');
-    try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);markMigrationSegmentCopied();return}}
-    catch(error){}
-    box.focus();box.select();$('migration-export-status').textContent='自动复制受限。请在文本框内长按全选复制；完成复制操作后本段会记录进度。';
-  }
-  function moveMigrationSegment(offset){if(!activeMigrationExport)return;activeMigrationExport.index=Math.max(0,Math.min(activeMigrationExport.segments.length-1,activeMigrationExport.index+offset));renderMigrationExport()}
   function resetMigrationImport(){
     migrationImportSegments=[];validatedMigration=null;$('migration-import-text').value='';$('migration-import-progress').textContent='已收到 0 / ? 段';$('migration-import-status').textContent='等待迁移分段。';$('migration-preview').hidden=true;$('migration-preview').textContent='';$('confirm-migration-import').hidden=true;
   }
@@ -1088,7 +1055,6 @@ window.testingSessionStorage=scoped(window.sessionStorage);
     const next={CCB:$('channel-rate-ccb').value===''?null:Number($('channel-rate-ccb').value),WECHAT:$('channel-rate-wechat').value===''?null:Number($('channel-rate-wechat').value)},old=paymentSettings;
     try{window.VehicleRentalLedger.validatePaymentSettings(next);paymentSettings=next;if(!savePlans()){paymentSettings=old;return}renderChannelSettings();$('channel-settings-status').textContent='费率已保存；历史收款金额、手续费及净到账保持原值。'}catch(error){paymentSettings=old;$('channel-settings-status').textContent=error.message}
   });
-  $('settings-migration').addEventListener('click',()=>startMigrationExport(false));
   $('home-new-rental').addEventListener('click',()=>openLedgerForm());
   renderChannelSettings();
   document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
@@ -1205,13 +1171,6 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   $('restore-snapshot').addEventListener('click',restoreSelectedSnapshot);
   $('import-backup').addEventListener('click',()=>$('backup-file').click());
   $('backup-file').addEventListener('change',async event=>{await importBackupFile(event.target.files?.[0]);event.target.value=''});
-  $('open-migration-export').addEventListener('click',()=>startMigrationExport(false));
-  $('open-emergency-segments').addEventListener('click',()=>startMigrationExport(true));
-  $('previous-migration-segment').addEventListener('click',()=>moveMigrationSegment(-1));
-  $('next-migration-segment').addEventListener('click',()=>moveMigrationSegment(1));
-  $('copy-migration-segment').addEventListener('click',copyCurrentMigrationSegment);
-  $('migration-segment-text').addEventListener('copy',markMigrationSegmentCopied);
-  $('close-migration-export').addEventListener('click',()=>$('migration-export-dialog').close());
   $('open-migration-import').addEventListener('click',()=>{if($('backup-dialog').open)$('backup-dialog').close();const dialog=$('migration-import-dialog');if(!dialog.open)dialog.showModal()});
   $('add-migration-segments').addEventListener('click',addMigrationSegments);
   $('clear-migration-import').addEventListener('click',resetMigrationImport);
