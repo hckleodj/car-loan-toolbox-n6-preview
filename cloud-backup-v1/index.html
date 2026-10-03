@@ -282,7 +282,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
 </dialog>
 <dialog id="backup-dialog">
   <div class="dialog-body">
-    <h2>数据备份与恢复</h2><p class="dialog-context">所有操作只在当前浏览器本地完成，不会上传服务器。</p>
+    <h2>数据备份与恢复</h2><p class="dialog-context">人工备份与恢复在当前浏览器完成；连接云账号后，完整快照会上传至配置的云项目。</p>
     <div class="backup-box">
       <div class="backup-primary">
         <div class="backup-box"><h3>自动云备份</h3><p id="cloud-status">未连接；本地记账继续可用。</p><p class="note">仅在工具箱打开时自动备份；关闭后不会继续。人工 JSON 备份仍需独立确认。</p><form id="cloud-login"><label>邮箱<input id="cloud-email" type="email" autocomplete="username" required></label><label>密码<input id="cloud-password" type="password" autocomplete="off" required></label><button>连接云备份</button></form><div class="backup-actions"><button type="button" id="cloud-now">立即备份 / 重试</button><button type="button" id="cloud-list">查看云备份</button><button type="button" id="cloud-logout">退出云账号</button></div><div id="cloud-items"></div><p class="note">恢复：下载经校验的完整快照，再用本页 JSON 文件恢复，预览并明确确认完整替换。</p></div><h3 class="backup-section-title">完整 JSON 文件备份</h3>
@@ -391,18 +391,18 @@ window.testingSessionStorage=scoped(window.sessionStorage);
 </div></dialog>
 <script src="./rental-calculation.js?v=d8c6d37e2075"></script>
 <script src="./rental-document.js?v=6d39c262aba3"></script>
-<script src="./vendor/html2canvas-1.4.1.min.js"></script>
-<script src="./vendor/jspdf-4.2.1.umd.min.js"></script>
+<script src="./vendor/html2canvas-1.4.1.min.js?v=e87e55079432"></script>
+<script src="./vendor/jspdf-4.2.1.umd.min.js?v=e6551fcdc32f"></script>
 <script src="./rental-export.js?v=243adcc4072e"></script>
 <script src="./installment-ledger.js?v=f5a52f828648"></script>
 <script src="./rental-ledger.js?v=eae9c9b4ffed"></script>
-<script src="./backup-state.js?v=ba49f5fa6455"></script>
-<script src="./local-snapshots.js?v=00871e97a3f7"></script>
+<script src="./backup-state.js?v=ed337af265c4"></script>
+<script src="./local-snapshots.js?v=b54a13274177"></script>
 <script src="./backup-transfer.js?v=465bf27813f0"></script>
-<script src="./supabase-client.js"></script>
-<script src="./cloud-backup.js"></script>
-<script src="./cloud-backup-config.js"></script>
-<script src="./vendor/supabase-2.57.4.js"></script>
+<script src="./supabase-client.js?v=9918909f473d"></script>
+<script src="./cloud-backup.js?v=8c8545b7f1d4"></script>
+<script src="./cloud-backup-config.js?v=c03697d9224e"></script>
+<script src="./vendor/supabase-2.57.4.js?v=7e94b62086de"></script>
 <script src="./migration-transfer.js?v=b0a57beecb10"></script>
 <script>
   const $=id=>document.getElementById(id);
@@ -1348,18 +1348,30 @@ window.testingSessionStorage=scoped(window.sessionStorage);
       window.VehicleRentalLedger.data(JSON.parse(raw));
       return {text:raw,revision:backupStateManager.snapshot().dataRevision,schemaVersion:JSON.parse(raw).schemaVersion||1};
     },onChange:state=>{
-      const labels={'not-connected':'未连接','pending':'本地数据待云备份','failed':'云备份失败，稍后重试；本地保存有效','connected':'完整快照已在云端校验'};
-      $('cloud-status').textContent=`${labels[state.status]}${state.reason==='payload-too-large'?'（完整包超过16MB支持范围，请保留人工备份）':state.reason==='backup-quota-full'?'（云备份空间已满，请保留人工备份并处理容量）':''} · 本地版本 ${backupStateManager.snapshot().dataRevision} · 云端版本 ${state.revision??'未知'} · 最近成功 ${state.lastSuccessfulAt||'无'}${state.checksum?' · '+state.checksum.slice(7,19):''}`;
+      const labels={'not-connected':'未连接','pending':'本地数据待云备份','failed':'云备份失败，稍后重试；本地保存有效','connected':'当前内容已在云端校验'};
+      $('cloud-status').textContent=`${labels[state.status]}${state.reason==='payload-too-large'?'（完整包超过16MB支持范围，请保留人工备份）':state.reason==='backup-quota-full'?'（云备份空间已满，请保留人工备份并处理容量）':''} · 本地版本 ${backupStateManager.snapshot().dataRevision} · 已校验本地版本 ${state.revision??'未知'}${state.snapshotRevision!==undefined&&state.snapshotRevision!==state.revision?' · 复用相同内容快照（原版本 '+state.snapshotRevision+'）':''} · 最近成功 ${state.lastSuccessfulAt||'无'}${state.checksum?' · '+state.checksum.slice(7,19):''}`;
     }
   });
   const cloudClient=window.DajinSupabase.createClient(window.DajinCloudConfig||{},window.supabase);
   let cloudAuthSequence=0;
-  async function useCloudSession(session){const seq=++cloudAuthSequence;cloudBackup.disconnect();if(!session||!cloudClient.client)return;try{const result=await cloudClient.client.auth.getUser();if(seq!==cloudAuthSequence)return;if(result.error||!result.data.user)return;cloudBackup.connect(window.DajinCloudBackup.transport(cloudClient.client,result.data.user.id))}catch(e){cloudBackup.emit('failed')}}
+  function renderCloudAccount(session){$('cloud-login').hidden=!!session;if(session)$('cloud-email').value=session.user.email||'';}
+  async function useCloudSession(session){
+    ++cloudAuthSequence;renderCloudAccount(session);
+    if(!session||!cloudClient.client){cloudBackup.disconnect();return}
+    // Server RLS validates the JWT on every operation. Keep the persisted
+    // identity available offline so reconnect can retry without a new login.
+    cloudBackup.connect(window.DajinCloudBackup.transport(cloudClient.client,session.user.id));
+  }
   if(cloudClient.configured){cloudClient.client.auth.onAuthStateChange((event,session)=>setTimeout(()=>useCloudSession(session),0));cloudClient.client.auth.getSession().then(result=>useCloudSession(result.data.session)).catch(()=>cloudBackup.emit('failed'));}
-  $('cloud-login').addEventListener('submit',async event=>{event.preventDefault();if(!cloudClient.configured){$('cloud-password').value='';$('cloud-status').textContent='隔离开发尚未配置测试 Supabase，未发送账号或业务数据。';return}const password=$('cloud-password').value;$('cloud-password').value='';try{const result=await cloudClient.client.auth.signInWithPassword({email:$('cloud-email').value,password});if(result.error)throw Error('auth');await useCloudSession(result.data.session)}catch(e){cloudBackup.emit('failed')}});
+  $('cloud-login').addEventListener('submit',async event=>{
+    event.preventDefault();if(!cloudClient.configured){$('cloud-password').value='';$('cloud-status').textContent='尚未配置测试 Supabase，未发送账号或业务数据。';return}
+    const button=$('cloud-login').querySelector('button'),password=$('cloud-password').value;$('cloud-password').value='';button.disabled=true;button.textContent='正在连接…';$('cloud-status').textContent='正在验证测试账号，请稍候…';
+    try{const result=await cloudClient.client.auth.signInWithPassword({email:$('cloud-email').value,password});if(result.error)throw Error('auth');await useCloudSession(result.data.session)}catch(e){$('cloud-status').textContent='登录未完成，请检查测试账号或网络；本地数据未改动。'}finally{button.disabled=false;button.textContent='连接云备份'}
+  });
   $('cloud-now').addEventListener('click',()=>cloudBackup.run());
   $('cloud-logout').addEventListener('click',async()=>{cloudAuthSequence++;cloudBackup.disconnect();$('cloud-items').replaceChildren();if(cloudClient.configured)await cloudClient.client.auth.signOut({scope:'local'});});
   $('cloud-list').addEventListener('click',async()=>{try{if(!cloudBackup.transport)throw Error('auth');const rows=await cloudBackup.transport.list();$('cloud-items').replaceChildren();for(const row of rows){const button=document.createElement('button');button.type='button';button.textContent=`${row.created_at} · 版本 ${row.local_revision} · ${row.checksum.slice(7,19)} · ${row.payload_size} 字节：下载恢复文件`;button.addEventListener('click',async()=>{try{const verified=await cloudBackup.download(row),business=JSON.parse(verified.text);const imported=normalizeImportedPlans(business),ledger=imported.ledgerData,restoreHash=await window.DajinBackupState.sha256Text(JSON.stringify(window.VehicleRentalLedger.pack(imported,ledger.vehicles,ledger.rentals,ledger.paymentSettings)));const payload=backupPayload(new Date(row.created_at),business,row.local_revision,restoreHash);const url=URL.createObjectURL(new Blob([JSON.stringify(payload)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='云端完整备份_'+row.local_revision+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(e){$('cloud-status').textContent='云端恢复文件校验失败；本地数据未改动。'}});$('cloud-items').append(button)}}catch(e){$('cloud-status').textContent='无法读取云备份，请检查连接后重试。'}});
+  window.addEventListener('offline',()=>cloudBackup.schedule());
   window.addEventListener('online',()=>cloudBackup.schedule());
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')cloudBackup.schedule()});
   cloudBackup.schedule();
