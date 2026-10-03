@@ -193,11 +193,18 @@ window.testingSessionStorage=scoped(window.sessionStorage);
         <div class="field"><label for="ledger-model">车型 *</label><input id="ledger-model"></div>
         <div class="field"><label for="ledger-vin">完整VIN（17位） *</label><input id="ledger-vin" maxlength="17"></div>
         <div class="field"><label for="ledger-plate">车牌</label><input id="ledger-plate"></div>
-        <div class="field"><label for="ledger-registration">上牌日期</label><input id="ledger-registration" type="date"></div>
+        <div class="field"><label for="ledger-registration-year">上牌日期（可直接填写年份）</label><div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px"><input id="ledger-registration-year" type="number" inputmode="numeric" min="1900" max="9999" step="1" placeholder="年，如2016" aria-label="上牌年份"><input id="ledger-registration-month" type="number" inputmode="numeric" min="1" max="12" step="1" placeholder="月" aria-label="上牌月份"><input id="ledger-registration-day" type="number" inputmode="numeric" min="1" max="31" step="1" placeholder="日" aria-label="上牌日"></div></div>
         <div class="field"><label for="ledger-color">颜色</label><input id="ledger-color"></div>
       </div></fieldset>
+      <fieldset><legend>承租人资料</legend><div class="grid">
+        <div class="field"><label for="ledger-renter">承租人姓名 *</label><input id="ledger-renter" autocomplete="name" required></div>
+        <div class="field"><label for="ledger-phone">联系电话</label><input id="ledger-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="40" placeholder="方便还车或收款时联系"></div>
+        <div class="field"><label for="ledger-contact">微信 / 其他联系信息</label><input id="ledger-contact" maxlength="200" placeholder="可填写微信号、联系地址等"></div>
+        <div class="field"><label for="ledger-id-number">身份证号（选填）</label><input id="ledger-id-number" maxlength="18" placeholder="15位或18位身份证号"></div>
+      </div>
+      <div class="field"><label for="ledger-id-photos">身份证照片（选填，最多2张）</label><input id="ledger-id-photos" type="file" accept="image/jpeg,image/png,image/webp" multiple><p class="note">可上传正反面，自动压缩。照片保存在本浏览器，并包含在完整 JSON 备份中。</p><div id="ledger-photo-preview"></div></div>
+      </fieldset>
       <div class="grid">
-        <div class="field"><label for="ledger-renter">承租人 *</label><input id="ledger-renter" required></div>
         <div class="field"><label for="ledger-start">放车日 *</label><input id="ledger-start" type="date" required></div>
         <div class="field"><label for="ledger-return">实际还车日</label><input id="ledger-return" type="date"></div>
         <div class="field"><label for="ledger-mode">计费方式</label><select id="ledger-mode"><option value="DAILY">按日</option><option value="MONTHLY">按月（30天）</option></select></div>
@@ -374,7 +381,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
 <script src="./vendor/jspdf-4.2.1.umd.min.js"></script>
 <script src="./rental-export.js?v=004567054c32"></script>
 <script src="./installment-ledger.js?v=4d2f2aafc290"></script>
-<script src="./rental-ledger.js"></script>
+<script src="./rental-ledger.js?v=0a75d4be15c5"></script>
 <script src="./backup-state.js"></script>
 <script src="./local-snapshots.js"></script>
 <script src="./backup-transfer.js"></script>
@@ -1172,9 +1179,38 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   function ledgerVehicleOptions(selected=''){
     $('ledger-vehicle').innerHTML='<option value="">新增车辆</option>'+vehicles.map(v=>`<option value="${escapeHtml(v.id)}">${escapeHtml([v.model,v.plateNumber,v.vin].filter(Boolean).join(' · '))}</option>`).join('');$('ledger-vehicle').value=selected;$('ledger-vehicle-fields').hidden=Boolean(selected);
   }
+  let ledgerIdentityPhotos=[],ledgerPhotoBusy=false,ledgerPhotoSequence=0;
+  function renderLedgerPhotos(){
+    $('ledger-photo-preview').innerHTML=ledgerIdentityPhotos.map((photo,index)=>`<div style="display:inline-block;width:45%;margin:4px"><img src="${photo}" alt="证件照片 ${index+1}" style="width:100%;max-height:160px;object-fit:contain"><button type="button" class="secondary" data-ledger-remove-photo="${index}">移除照片 ${index+1}</button></div>`).join('');
+  }
+  async function compressLedgerPhoto(file){
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>15*1024*1024)throw new Error('请选择15MB以内的JPG、PNG或WebP照片');
+    const url=URL.createObjectURL(file),img=new Image();
+    try{
+      await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('照片无法读取，请重新选择'));img.src=url});
+      if(!img.naturalWidth||!img.naturalHeight)throw new Error('照片尺寸无效');
+      const canvas=document.createElement('canvas'),scale=Math.min(1,1280/Math.max(img.naturalWidth,img.naturalHeight));canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+      const context=canvas.getContext('2d');if(!context)throw new Error('当前浏览器无法处理照片');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(img,0,0,canvas.width,canvas.height);
+      for(const quality of [0.85,0.7,0.55,0.4]){const photo=canvas.toDataURL('image/jpeg',quality);if(photo.length<=280000)return photo}
+      throw new Error('照片压缩后仍过大，请选择较小照片');
+    }finally{URL.revokeObjectURL(url)}
+  }
+  $('ledger-id-photos').addEventListener('change',async event=>{
+    const files=Array.from(event.target.files||[]);event.target.value='';if(!files.length)return;
+    if(ledgerPhotoBusy){$('ledger-status').textContent='照片正在处理，请稍候';return}
+    if(ledgerIdentityPhotos.length+files.length>2){$('ledger-status').textContent='每单最多2张照片；请先移除要替换的照片';return}
+    const sequence=++ledgerPhotoSequence;ledgerPhotoBusy=true;$('ledger-status').textContent='正在压缩照片…';
+    try{const photos=[];for(const file of files)photos.push(await compressLedgerPhoto(file));if(sequence===ledgerPhotoSequence){ledgerIdentityPhotos=ledgerIdentityPhotos.concat(photos);renderLedgerPhotos();$('ledger-status').textContent='照片已准备好，请保存出租记录。'}}catch(error){if(sequence===ledgerPhotoSequence)$('ledger-status').textContent=error.message}finally{if(sequence===ledgerPhotoSequence)ledgerPhotoBusy=false}
+  });
+  function ledgerRegistrationDate(){
+    const values=['year','month','day'].map(part=>$('ledger-registration-'+part).value.trim());
+    if(values.every(value=>!value))return '';
+    if(values.some(value=>!value)||!/^\d{4}$/.test(values[0])||Number(values[0])<1900||!values.slice(1).every(value=>/^\d{1,2}$/.test(value)))throw new Error('请完整填写上牌年、月、日；年份可直接输入，如2016。');
+    const date=`${values[0]}-${pad(Number(values[1]))}-${pad(Number(values[2]))}`;window.VehicleRentalLedger.day(date);return date;
+  }
   function ledgerDraft(){
     const previous=rentals.find(r=>r.id===$('ledger-id').value),now=new Date().toISOString();
-    return {id:previous?.id||crypto.randomUUID(),vehicleId:$('ledger-vehicle').value,renterName:$('ledger-renter').value.trim(),startDate:$('ledger-start').value,returnDate:$('ledger-return').value||null,billingMode:$('ledger-mode').value,dailyRate:$('ledger-mode').value==='DAILY'?Number($('ledger-rate').value):0,monthlyRate:$('ledger-mode').value==='MONTHLY'?Number($('ledger-rate').value):0,receivedAmount:Number($('ledger-received').value),status:$('ledger-state').value,manualReceivable:$('ledger-manual').checked?Number($('ledger-final').value):null,note:$('ledger-note').value.trim(),createdAt:previous?.createdAt||now,updatedAt:now};
+    return {id:previous?.id||crypto.randomUUID(),vehicleId:$('ledger-vehicle').value,renterName:$('ledger-renter').value.trim(),renterPhone:$('ledger-phone').value.trim(),renterContact:$('ledger-contact').value.trim(),renterIdNumber:$('ledger-id-number').value.trim().toUpperCase(),renterIdPhotos:ledgerIdentityPhotos.slice(),startDate:$('ledger-start').value,returnDate:$('ledger-return').value||null,billingMode:$('ledger-mode').value,dailyRate:$('ledger-mode').value==='DAILY'?Number($('ledger-rate').value):0,monthlyRate:$('ledger-mode').value==='MONTHLY'?Number($('ledger-rate').value):0,receivedAmount:Number($('ledger-received').value),status:$('ledger-state').value,manualReceivable:$('ledger-manual').checked?Number($('ledger-final').value):null,note:$('ledger-note').value.trim(),createdAt:previous?.createdAt||now,updatedAt:now};
   }
   function ledgerPreview(){
     $('ledger-manual-field').hidden=!$('ledger-manual').checked;
@@ -1183,19 +1219,19 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   function ledgerCanStart(){return planStorageState.status==='missing'&&!plans.length&&testingLocalStorage.getItem(PLAN_STORAGE_KEY)===null}
   function openLedgerForm(id='',action=''){
     if(!ledgerCanStart()&&!ensureStorageWritable())return;
-    const r=rentals.find(item=>item.id===id);$('ledger-id').value=r?.id||'';ledgerVehicleOptions(r?.vehicleId||'');
-    for(const key of ['model','vin','plate','registration','color'])$('ledger-'+key).value='';
-    $('ledger-renter').value=r?.renterName||'';$('ledger-start').value=r?.startDate||toISO(todayNoon());$('ledger-return').value=r?.returnDate||'';$('ledger-mode').value=r?.billingMode||'DAILY';$('ledger-rate').value=r?(r.billingMode==='DAILY'?r.dailyRate:r.monthlyRate):'';$('ledger-received').value=r?.receivedAmount||0;$('ledger-state').value=r?.status||'RENTING';$('ledger-manual').checked=r?.manualReceivable!=null;$('ledger-final').value=r?.manualReceivable??'';$('ledger-note').value=r?.note||'';
+    ++ledgerPhotoSequence;ledgerPhotoBusy=false;const r=rentals.find(item=>item.id===id);ledgerIdentityPhotos=(r?.renterIdPhotos||[]).slice();$('ledger-id-number').value=r?.renterIdNumber||'';$('ledger-id-photos').value='';renderLedgerPhotos();$('ledger-id').value=r?.id||'';ledgerVehicleOptions(r?.vehicleId||'');
+    for(const key of ['model','vin','plate','registration-year','registration-month','registration-day','color'])$('ledger-'+key).value='';
+    $('ledger-renter').value=r?.renterName||'';$('ledger-phone').value=r?.renterPhone||'';$('ledger-contact').value=r?.renterContact||'';$('ledger-start').value=r?.startDate||toISO(todayNoon());$('ledger-return').value=r?.returnDate||'';$('ledger-mode').value=r?.billingMode||'DAILY';$('ledger-rate').value=r?(r.billingMode==='DAILY'?r.dailyRate:r.monthlyRate):'';$('ledger-received').value=r?.receivedAmount||0;$('ledger-state').value=r?.status||'RENTING';$('ledger-manual').checked=r?.manualReceivable!=null;$('ledger-final').value=r?.manualReceivable??'';$('ledger-note').value=r?.note||'';
     if(action==='return'){$('ledger-return').value=toISO(todayNoon());$('ledger-state').value='RETURNED_UNSETTLED'}
     if(action==='settle'){$('ledger-state').value='SETTLED'}
     $('ledger-status').textContent='';$('ledger-form').hidden=false;ledgerPreview();$('ledger-form').scrollIntoView({block:'start'});
   }
   function renderRentalLedger(){
     const labels={RENTING:'在租',RETURNED_UNSETTLED:'已归还未结清',SETTLED:'已结清'};
-    function card(r){const v=vehicles.find(v=>v.id===r.vehicleId),c=window.VehicleRentalLedger.calculate(r,toISO(todayNoon()));return `<article class="snapshot-item"><strong>${escapeHtml(v?.model||'未知车辆')} · ${escapeHtml(v?.plateNumber||v?.vin||'')}</strong><p>${escapeHtml(r.renterName)} · ${labels[r.status]}<br>放车 ${escapeHtml(r.startDate)}${r.returnDate?' · 还车 '+escapeHtml(r.returnDate):''}<br>${r.billingMode==='DAILY'?'日租':'月租'} ¥${money(r.billingMode==='DAILY'?r.dailyRate:r.monthlyRate)}</p><div class="summary"><div class="metric"><span>计租天数</span><strong>${c.days} 天</strong></div><div class="metric"><span>${r.returnDate?'最终应收':'当前应收'}</span><strong>¥${money(c.receivable)}</strong></div><div class="metric"><span>已收</span><strong>¥${money(r.receivedAmount)}</strong></div><div class="metric"><span>未收</span><strong style="color:var(--danger)">¥${money(c.outstanding)}</strong></div></div>${r.manualReceivable!=null?`<p>人工调整 · 系统计算 ¥${money(c.systemAmount)}</p>`:''}${r.note?`<p>${escapeHtml(r.note)}</p>`:''}<div class="dialog-actions"><button class="secondary" type="button" data-ledger-edit="${r.id}">编辑 / 收款</button>${r.status==='RENTING'?`<button type="button" data-ledger-return="${r.id}">登记还车</button>`:r.status==='RETURNED_UNSETTLED'?`<button type="button" data-ledger-settle="${r.id}">标记结清</button>`:''}</div></article>`}
+    function card(r){const v=vehicles.find(v=>v.id===r.vehicleId),c=window.VehicleRentalLedger.calculate(r,toISO(todayNoon()));return `<article class="snapshot-item"><strong>${escapeHtml(v?.model||'未知车辆')} · ${escapeHtml(v?.plateNumber||v?.vin||'')}</strong><p>承租人：${escapeHtml(r.renterName)} · ${labels[r.status]}${r.renterPhone?`<br>联系电话：<a href="tel:${escapeHtml(r.renterPhone.replace(/[^+0-9]/g,''))}">${escapeHtml(r.renterPhone)}</a>`:''}${r.renterContact?`<br>联系信息：${escapeHtml(r.renterContact)}`:''}${!r.renterPhone&&!r.renterContact?'<br><span class="note">联系方式未登记，可点“编辑 / 收款”补充</span>':''}${r.renterIdNumber?`<br>身份证号：${escapeHtml(r.renterIdNumber)}`:''}<br>放车 ${escapeHtml(r.startDate)}${r.returnDate?' · 还车 '+escapeHtml(r.returnDate):''}<br>${r.billingMode==='DAILY'?'日租':'月租'} ¥${money(r.billingMode==='DAILY'?r.dailyRate:r.monthlyRate)}</p><div class="summary"><div class="metric"><span>计租天数</span><strong>${c.days} 天</strong></div><div class="metric"><span>${r.returnDate?'最终应收':'当前应收'}</span><strong>¥${money(c.receivable)}</strong></div><div class="metric"><span>已收</span><strong>¥${money(r.receivedAmount)}</strong></div><div class="metric"><span>未收</span><strong style="color:var(--danger)">¥${money(c.outstanding)}</strong></div></div>${r.manualReceivable!=null?`<p>人工调整 · 系统计算 ¥${money(c.systemAmount)}</p>`:''}${r.note?`<p>${escapeHtml(r.note)}</p>`:''}${r.renterIdPhotos?.length?`<details><summary>查看证件照片（${r.renterIdPhotos.length}张）</summary>${r.renterIdPhotos.map((photo,index)=>`<img src="${photo}" alt="证件照片 ${index+1}" loading="lazy" style="max-width:100%;max-height:300px;object-fit:contain">`).join('')}</details>`:''}<div class="dialog-actions"><button class="secondary" type="button" data-ledger-edit="${r.id}">编辑 / 收款</button>${r.status==='RENTING'?`<button type="button" data-ledger-return="${r.id}">登记还车</button>`:r.status==='RETURNED_UNSETTLED'?`<button type="button" data-ledger-settle="${r.id}">标记结清</button>`:''}</div></article>`}
     $('ledger-current').innerHTML=rentals.filter(r=>r.status==='RENTING').map(card).join('')||'<p class="note">暂无在租车辆</p>';$('ledger-history').innerHTML=rentals.filter(r=>r.status!=='RENTING').map(card).join('')||'<p class="note">暂无历史记录</p>';
   }
-  $('ledger-new').addEventListener('click',()=>openLedgerForm());$('ledger-cancel').addEventListener('click',()=>{$('ledger-form').hidden=true});
+  $('ledger-new').addEventListener('click',()=>openLedgerForm());$('ledger-cancel').addEventListener('click',()=>{++ledgerPhotoSequence;ledgerPhotoBusy=false;$('ledger-form').hidden=true});
   $('ledger-vehicle').addEventListener('change',()=>{$('ledger-vehicle-fields').hidden=Boolean($('ledger-vehicle').value)});
   $('ledger-return').addEventListener('change',()=>{$('ledger-state').value=$('ledger-return').value?'RETURNED_UNSETTLED':'RENTING';ledgerPreview()});
   $('ledger-form').addEventListener('input',ledgerPreview);
@@ -1203,13 +1239,14 @@ window.testingSessionStorage=scoped(window.sessionStorage);
     event.preventDefault();const first=ledgerCanStart();if(!first&&!ensureStorageWritable())return;
     const old={vehicles,rentals};
     try{
+      if(ledgerPhotoBusy)throw new Error('照片正在处理，请稍候再保存');
       const draft=ledgerDraft();if(draft.startDate>toISO(todayNoon()))throw new Error('放车日不能晚于今天');if(draft.returnDate&&draft.returnDate>toISO(todayNoon()))throw new Error('实际还车日不能晚于今天');
-      const nextVehicles=JSON.parse(JSON.stringify(vehicles));if(!draft.vehicleId){const v={id:crypto.randomUUID(),model:$('ledger-model').value.trim(),vin:$('ledger-vin').value.trim().toUpperCase(),plateNumber:$('ledger-plate').value.trim(),registrationDate:$('ledger-registration').value,color:$('ledger-color').value.trim()};nextVehicles.push(v);draft.vehicleId=v.id}
+      const nextVehicles=JSON.parse(JSON.stringify(vehicles));if(!draft.vehicleId){const v={id:crypto.randomUUID(),model:$('ledger-model').value.trim(),vin:$('ledger-vin').value.trim().toUpperCase(),plateNumber:$('ledger-plate').value.trim(),registrationDate:ledgerRegistrationDate(),color:$('ledger-color').value.trim()};nextVehicles.push(v);draft.vehicleId=v.id}
       if($('ledger-manual').checked&&!$('ledger-final').value.trim())throw new Error('请输入人工调整的最终应收');
       const nextRentals=rentals.filter(r=>r.id!==draft.id).concat(draft);window.VehicleRentalLedger.validate(nextVehicles,nextRentals);if(first){if(!confirm('当前浏览器没有业务数据。确定建立第一条出租记录？不会改动其他存储项。'))return;if(!ledgerCanStart())throw new Error('存储已发生变化，请刷新后检查');const raw=JSON.stringify(window.VehicleRentalLedger.pack(plans,nextVehicles,nextRentals));trackedSetItem(PLAN_STORAGE_KEY,raw);planStorageState.raw=raw;planStorageState.status='ok';planStorageState.locked=false;planStorageState.reason='业务数据正常。';vehicles=nextVehicles;rentals=nextRentals;recordSuccessfulBusinessWrite(raw);renderStorageProtection()}else{vehicles=nextVehicles;rentals=nextRentals;if(!savePlans()){({vehicles,rentals}=old);return}}$('ledger-form').hidden=true;renderRentalLedger();$('ledger-status').textContent='出租记录已保存。';
     }catch(error){({vehicles,rentals}=old);$('ledger-status').textContent=error.message}
   });
-  document.addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.ledgerEdit)openLedgerForm(button.dataset.ledgerEdit);if(button.dataset.ledgerReturn)openLedgerForm(button.dataset.ledgerReturn,'return');if(button.dataset.ledgerSettle)openLedgerForm(button.dataset.ledgerSettle,'settle')});
+  document.addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.ledgerRemovePhoto!==undefined){if(ledgerPhotoBusy){$('ledger-status').textContent='照片正在处理，请稍候';return}ledgerIdentityPhotos.splice(Number(button.dataset.ledgerRemovePhoto),1);renderLedgerPhotos();return}if(button.dataset.ledgerEdit)openLedgerForm(button.dataset.ledgerEdit);if(button.dataset.ledgerReturn)openLedgerForm(button.dataset.ledgerReturn,'return');if(button.dataset.ledgerSettle)openLedgerForm(button.dataset.ledgerSettle,'settle')});
   window.addEventListener('focus',renderRentalLedger);window.addEventListener('pageshow',renderRentalLedger);document.addEventListener('visibilitychange',()=>{if(!document.hidden)renderRentalLedger()});
   function scheduleLedgerRefresh(){const now=new Date(),next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);const timer=setTimeout(()=>{renderRentalLedger();scheduleLedgerRefresh()},next-now+100);timer?.unref?.()}
   renderRentalLedger();scheduleLedgerRefresh();
