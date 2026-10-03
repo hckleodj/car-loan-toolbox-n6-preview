@@ -294,9 +294,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
       <p class="backup-warning">备份文件包含客户、车辆及收款记录，请妥善保管，不要发送给无关人员。</p>
       <div class="backup-divider"></div>
       <div class="backup-actions"><button class="secondary" type="button" id="import-backup">从 JSON 文件恢复</button></div>
-      <details class="desktop-guide"><summary>恢复历史分段文件（仅兼容旧资料）</summary><p>仅用于读取以前保存的 DJINMIG1 / DJINMIG2 分段，不再生成新的分段备份。</p><button class="secondary" type="button" id="open-migration-import">恢复历史分段文件</button></details>
       <input id="backup-file" type="file" accept=".json,application/json" hidden>
-      <details class="desktop-guide"><summary>添加到 OPPO 手机桌面</summary><p>请使用 OPPO 浏览器菜单中的“添加到桌面”或“添加至主屏幕”。是否显示该入口取决于当前 ColorOS 和浏览器版本。</p></details>
       <div class="backup-divider"></div>
       <button class="secondary" type="button" id="open-local-snapshots">本地历史版本</button>
       <p class="backup-warning">本地历史版本仅用于误删、误改时的应急恢复，与当前浏览器处于同一存储环境，不能替代外部备份。</p>
@@ -1171,7 +1169,6 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   $('restore-snapshot').addEventListener('click',restoreSelectedSnapshot);
   $('import-backup').addEventListener('click',()=>$('backup-file').click());
   $('backup-file').addEventListener('change',async event=>{await importBackupFile(event.target.files?.[0]);event.target.value=''});
-  $('open-migration-import').addEventListener('click',()=>{if($('backup-dialog').open)$('backup-dialog').close();const dialog=$('migration-import-dialog');if(!dialog.open)dialog.showModal()});
   $('add-migration-segments').addEventListener('click',addMigrationSegments);
   $('clear-migration-import').addEventListener('click',resetMigrationImport);
   $('confirm-migration-import').addEventListener('click',confirmMigrationImport);
