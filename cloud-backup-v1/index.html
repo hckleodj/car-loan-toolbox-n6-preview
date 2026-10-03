@@ -400,7 +400,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
 <script src="./local-snapshots.js?v=b54a13274177"></script>
 <script src="./backup-transfer.js?v=465bf27813f0"></script>
 <script src="./supabase-client.js?v=9918909f473d"></script>
-<script src="./cloud-backup.js?v=8c8545b7f1d4"></script>
+<script src="./cloud-backup.js?v=ced823fcdbef"></script>
 <script src="./cloud-backup-config.js?v=c03697d9224e"></script>
 <script src="./vendor/supabase-2.57.4.js?v=7e94b62086de"></script>
 <script src="./migration-transfer.js?v=b0a57beecb10"></script>
@@ -1337,6 +1337,11 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   backupStateReady.then(refreshBackupAccess);
   window.addEventListener('focus',renderReminders);
 
+  function cloudLocalTime(value,fileName=false){
+    if(!value)return '无';const d=new Date(value);if(!Number.isFinite(d.getTime()))return '时间未知';
+    const pad=n=>String(n).padStart(2,'0'),day=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    return day+(fileName?'_':' ')+[pad(d.getHours()),pad(d.getMinutes()),pad(d.getSeconds())].join(fileName?'-':':');
+  }
   try {
   cloudBackup=new window.DajinCloudBackup.Manager({
     hash:window.DajinBackupState.sha256Text,online:()=>navigator.onLine!==false,
@@ -1349,7 +1354,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
       return {text:raw,revision:backupStateManager.snapshot().dataRevision,schemaVersion:JSON.parse(raw).schemaVersion||1};
     },onChange:state=>{
       const labels={'not-connected':'未连接','pending':'本地数据待云备份','failed':'云备份失败，稍后重试；本地保存有效','connected':'当前内容已在云端校验'};
-      $('cloud-status').textContent=`${labels[state.status]}${state.reason==='payload-too-large'?'（完整包超过16MB支持范围，请保留人工备份）':state.reason==='backup-quota-full'?'（云备份空间已满，请保留人工备份并处理容量）':''} · 本地版本 ${backupStateManager.snapshot().dataRevision} · 已校验本地版本 ${state.revision??'未知'}${state.snapshotRevision!==undefined&&state.snapshotRevision!==state.revision?' · 复用相同内容快照（原版本 '+state.snapshotRevision+'）':''} · 最近成功 ${state.lastSuccessfulAt||'无'}${state.checksum?' · '+state.checksum.slice(7,19):''}`;
+      $('cloud-status').textContent=`${labels[state.status]}${state.reason==='payload-too-large'?'（完整包超过16MB支持范围，请保留人工备份）':state.reason==='backup-quota-full'?'（云备份空间已满，请保留人工备份并处理容量）':''} · 本地版本 ${backupStateManager.snapshot().dataRevision} · 已校验本地版本 ${state.revision??'未知'}${state.snapshotRevision!==undefined&&state.snapshotRevision!==state.revision?' · 复用相同内容快照（原版本 '+state.snapshotRevision+'）':''} · 快照备份时间 ${cloudLocalTime(state.lastSuccessfulAt)}（手机本地时间） · 本次校验 ${cloudLocalTime(state.lastVerifiedAt)}${state.checksum?' · '+state.checksum.slice(7,19):''}`;
     }
   });
   const cloudClient=window.DajinSupabase.createClient(window.DajinCloudConfig||{},window.supabase);
@@ -1370,7 +1375,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   });
   $('cloud-now').addEventListener('click',()=>cloudBackup.run());
   $('cloud-logout').addEventListener('click',async()=>{cloudAuthSequence++;cloudBackup.disconnect();$('cloud-items').replaceChildren();if(cloudClient.configured)await cloudClient.client.auth.signOut({scope:'local'});});
-  $('cloud-list').addEventListener('click',async()=>{try{if(!cloudBackup.transport)throw Error('auth');const rows=await cloudBackup.transport.list();$('cloud-items').replaceChildren();for(const row of rows){const button=document.createElement('button');button.type='button';button.textContent=`${row.created_at} · 版本 ${row.local_revision} · ${row.checksum.slice(7,19)} · ${row.payload_size} 字节：下载恢复文件`;button.addEventListener('click',async()=>{try{const verified=await cloudBackup.download(row),business=JSON.parse(verified.text);const imported=normalizeImportedPlans(business),ledger=imported.ledgerData,restoreHash=await window.DajinBackupState.sha256Text(JSON.stringify(window.VehicleRentalLedger.pack(imported,ledger.vehicles,ledger.rentals,ledger.paymentSettings)));const payload=backupPayload(new Date(row.created_at),business,row.local_revision,restoreHash);const url=URL.createObjectURL(new Blob([JSON.stringify(payload)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='云端完整备份_'+row.local_revision+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(e){$('cloud-status').textContent='云端恢复文件校验失败；本地数据未改动。'}});$('cloud-items').append(button)}}catch(e){$('cloud-status').textContent='无法读取云备份，请检查连接后重试。'}});
+  $('cloud-list').addEventListener('click',async()=>{try{if(!cloudBackup.transport)throw Error('auth');const rows=await cloudBackup.transport.list();$('cloud-items').replaceChildren();for(const row of rows){const button=document.createElement('button');button.type='button';button.textContent=`备份于 ${cloudLocalTime(row.created_at)}（本地时间） · 版本 ${row.local_revision} · ${row.checksum.slice(7,19)} · ${row.payload_size} 字节：下载恢复文件`;button.addEventListener('click',async()=>{try{const verified=await cloudBackup.download(row),business=JSON.parse(verified.text);const imported=normalizeImportedPlans(business),ledger=imported.ledgerData,restoreHash=await window.DajinBackupState.sha256Text(JSON.stringify(window.VehicleRentalLedger.pack(imported,ledger.vehicles,ledger.rentals,ledger.paymentSettings)));const payload=backupPayload(new Date(row.created_at),business,row.local_revision,restoreHash);const url=URL.createObjectURL(new Blob([JSON.stringify(payload)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='云端完整备份_'+cloudLocalTime(row.created_at,true)+'_版本'+row.local_revision+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(e){$('cloud-status').textContent='云端恢复文件校验失败；本地数据未改动。'}});$('cloud-items').append(button)}}catch(e){$('cloud-status').textContent='无法读取云备份，请检查连接后重试。'}});
   window.addEventListener('offline',()=>cloudBackup.schedule());
   window.addEventListener('online',()=>cloudBackup.schedule());
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')cloudBackup.schedule()});
