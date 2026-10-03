@@ -63,7 +63,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   <div class="backup-reminder" id="backup-reminder" hidden><span>数据已变更，请下载完整 JSON 备份。</span><button type="button" id="backup-reminder-action">立即备份</button></div>
   <div class="data-safety safety-status" id="backup-safety-status"><strong id="backup-safety-title">数据安全 · 正在检查</strong><span id="backup-safety-detail">正在核对本地备份状态。</span></div>
   <div class="wechat-notice" id="wechat-notice" hidden><strong>当前在微信内打开</strong>微信可能限制文件下载，并且网页缓存可能被微信清理。正式客户数据建议使用手机系统浏览器管理。请通过微信右上角菜单选择“在浏览器打开”。</div>
-  <details class="data-safety data-safety-help"><summary>本机数据 · 备份与使用说明</summary><p>正式经营数据请固定在 OPPO 系统浏览器中使用。当前数据只保存在本设备当前浏览器；换浏览器或清理数据后不会自动同步。请定期下载完整 JSON 备份。</p></details>
+  <details class="data-safety data-safety-help"><summary>本机数据 · 备份与使用说明</summary><p>正式经营数据请固定在 OPPO 系统浏览器中使用。本地数据是记账依据；连接云账号后备份完整快照。换浏览器后仍需明确恢复文件，不会自动覆盖本地数据。完整 JSON 可作为独立备用。</p></details>
   <div class="recovery-alert" id="recovery-alert" hidden><strong>客户数据保护已启动</strong><span id="recovery-alert-message">系统已停止写入，请先检查并备份原始数据。</span><button type="button" id="open-storage-diagnostics">立即检查原始数据</button></div>
 
   <div class="panel active" id="reminders-panel">
@@ -302,21 +302,6 @@ window.testingSessionStorage=scoped(window.sessionStorage);
     <div class="dialog-actions"><button class="secondary" type="button" id="close-backup">关闭</button></div>
   </div>
 </dialog>
-<dialog class="required-dialog" id="backup-required-dialog">
-  <div class="dialog-body">
-    <h2>重要数据需要备份</h2>
-    <p class="dialog-context">你有新的客户或还款数据尚未完成备份，距离上一次备份已经超过24小时。<br><br>为避免客户资料、还款记录再次丢失，请先完成备份后继续使用。</p>
-    <p class="backup-status" id="backup-required-last-time">最近备份：尚未完成</p>
-    <div class="dialog-actions"><button type="button" id="required-backup-now">立即下载备份</button><button class="secondary" type="button" id="request-backup-grace">紧急进入30分钟</button></div>
-  </div>
-</dialog>
-<dialog class="required-dialog" id="backup-grace-dialog">
-  <div class="dialog-body">
-    <h2>确认暂时跳过备份？</h2>
-    <p class="dialog-context">仅建议在当前无法完成备份、但必须立即处理业务时使用。<br><br>临时进入不会把数据标记为已备份。30分钟后系统会再次提醒。</p>
-    <div class="dialog-actions"><button class="secondary" type="button" id="cancel-backup-grace">返回备份</button><button type="button" id="confirm-backup-grace">确认紧急进入</button></div>
-  </div>
-</dialog>
 <dialog id="backup-confirm-dialog">
   <div class="dialog-body">
     <h2>确认备份文件已保存？</h2>
@@ -406,7 +391,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   const backupStateModuleAvailable=Boolean(window.DajinBackupState?.BackupStateManager);
   if(!backupStateModuleAvailable){
     const alertBox=$('recovery-alert');
-    if(alertBox){alertBox.hidden=false;$('recovery-alert-message').textContent='备份状态模块加载失败。客户主数据未被初始化或改动；正式备份确认已停用，可在强提醒中紧急进入30分钟。';const action=$('open-storage-diagnostics');if(action)action.hidden=true}
+    if(alertBox){alertBox.hidden=false;$('recovery-alert-message').textContent='备份状态模块加载失败。客户主数据未被初始化或改动；正式备份确认已停用，请保留完整 JSON 文件，检查后继续使用。';const action=$('open-storage-diagnostics');if(action)action.hidden=true}
     class EmergencyBackupStateManager{
       constructor(options={}){this.storage=options.storage;this.stateKey=options.stateKey||BACKUP_STATE_KEY;this.legacyDirtyKey=options.legacyDirtyKey||BACKUP_DIRTY_KEY;this.onChange=()=>{};this.currentDataHash=null;this.metadataInvalid=true;this.lastError=new Error('备份状态模块未加载');this.lastStorageWriteError=null;this.now=()=>Date.now();let saved={};try{saved=JSON.parse(this.storage.getItem(this.stateKey)||'{}')}catch(error){}this.state={lastBackupAt:typeof saved.lastBackupAt==='string'?saved.lastBackupAt:null,lastDataChangeAt:typeof saved.lastDataChangeAt==='string'?saved.lastDataChangeAt:null,dirtySinceBackup:true,backupVersion:1,dataRevision:Number.isInteger(saved.dataRevision)&&saved.dataRevision>=0?saved.dataRevision:0,lastBackedUpRevision:Number.isInteger(saved.lastBackedUpRevision)&&saved.lastBackedUpRevision>=0?saved.lastBackedUpRevision:0,lastBackupHash:typeof saved.lastBackupHash==='string'?saved.lastBackupHash:null,lastBackupMethod:typeof saved.lastBackupMethod==='string'?saved.lastBackupMethod:null,backupGraceUntil:typeof saved.backupGraceUntil==='string'?saved.backupGraceUntil:null}}
       initialize(){return Promise.resolve(this.snapshot())}whenIdle(){return Promise.resolve(this.snapshot())}needsBackup(){return true}isGraceActive(nowMs=this.now()){const until=Date.parse(this.state.backupGraceUntil);return Number.isFinite(nowMs)&&Number.isFinite(until)&&until>nowMs&&until-nowMs<=30*60*1000}shouldBlockBackup(nowMs=this.now()){return !this.isGraceActive(nowMs)}
@@ -473,38 +458,33 @@ window.testingSessionStorage=scoped(window.sessionStorage);
       planStorageState.status='unsupported';planStorageState.reason='原客户数据仍存在，但结构不是可识别的客户列表，已禁止覆盖。';return recoverAlternatePlans();
     }catch(error){planStorageState.status='inaccessible';planStorageState.reason=`当前浏览器拒绝访问本地客户数据：${error.message||'未知错误'}。`;return []}
   }
-  function renderStorageProtection(){const alertBox=$('recovery-alert');if(!alertBox)return;if(!backupStateModuleAvailable){alertBox.hidden=false;$('recovery-alert-message').textContent='备份状态模块加载失败。客户主数据未被初始化或改动；正式备份确认已停用，可在强提醒中紧急进入30分钟。'}else{alertBox.hidden=!planStorageState.locked;$('recovery-alert-message').textContent=planStorageState.reason}}
+  function renderStorageProtection(){const alertBox=$('recovery-alert');if(!alertBox)return;if(!backupStateModuleAvailable){alertBox.hidden=false;$('recovery-alert-message').textContent='备份状态模块加载失败。客户主数据未被初始化或改动；正式备份确认已停用，请保留完整 JSON 文件，检查后继续使用。'}else{alertBox.hidden=!planStorageState.locked;$('recovery-alert-message').textContent=planStorageState.reason}}
   function hasStoredBusinessData(){try{const value=JSON.parse(planStorageState.raw);return (Array.isArray(value)&&value.length>0)||(value?.schemaVersion===2&&(value.plans.length>0||value.rentals.length>0))}catch(error){return false}}
-  function backupAccessBlocked(){
-    try{if(!hasStoredBusinessData()||!backupStateManager.shouldBlockBackup())return false}catch(error){}
-    refreshBackupAccess();return true;
-  }
   function ensureStorageWritable(){
-    if(backupAccessBlocked())return false;
     if(planStorageState.locked){renderStorageProtection();openRecoveryDialog();return false}
     try{
       if(testingLocalStorage.getItem(PLAN_STORAGE_KEY)!==planStorageState.raw){planStorageState.status='changed';planStorageState.locked=true;planStorageState.reason='客户原始数据在页面打开后发生变化，已停止写入，避免覆盖。';renderStorageProtection();openRecoveryDialog();return false}
     }catch(error){planStorageState.status='inaccessible';planStorageState.locked=true;planStorageState.reason=`保存前无法访问客户数据：${error.message||'未知错误'}。`;renderStorageProtection();openRecoveryDialog();return false}
     return true;
   }
-  function renderBackupReminder(){const reminder=$('backup-reminder');if(!reminder)return;try{reminder.hidden=planStorageState.locked||!backupStateManager.state.dirtySinceBackup}catch(error){reminder.hidden=true}}
-  function refreshBackupAccess(){
-    let state;try{state=backupStateManager.snapshot()}catch(error){return}
-    const box=$('backup-safety-status'),title=$('backup-safety-title'),detail=$('backup-safety-detail'),required=$('backup-required-dialog');
-    box.classList.remove('pending','required');
-    if(!state.dirtySinceBackup&&!state.needsBackup){title.textContent='数据安全 · 已备份';detail.textContent=`最近备份：${recentBackupLabel(state.lastBackupAt)}`}
-    else if(!state.needsBackup){box.classList.add('pending');title.textContent='数据安全 · 有新数据待备份';detail.textContent=`最近备份：${recentBackupLabel(state.lastBackupAt)}`}
-    else{box.classList.add('required');title.textContent='数据安全 · 需要立即备份';detail.textContent=`最近备份：${recentBackupLabel(state.lastBackupAt)}`}
-    $('backup-required-last-time').textContent=`最近备份：${state.lastBackupAt?localDateTime(new Date(state.lastBackupAt)):'尚未完成'}`;
-    if(backupBlockTimer){clearTimeout(backupBlockTimer);backupBlockTimer=null}
-    if(state.graceActive&&state.backupGraceUntil){const delay=Math.max(0,Date.parse(state.backupGraceUntil)-backupStateManager.now()+50);backupBlockTimer=setTimeout(refreshBackupAccess,delay);backupBlockTimer?.unref?.()}
-    const shouldBlock=state.shouldBlockBackup&&hasStoredBusinessData();
-    if(shouldBlock&&!planStorageState.locked&&!$('backup-dialog').open&&!$('backup-confirm-dialog').open&&!$('backup-grace-dialog').open){if(!required.open)required.showModal()}
-    else if(required.open&&!shouldBlock)required.close();
+  function backupCoverage(){
+    const state=backupStateManager.snapshot(),cloud=cloudBackup?.state;
+    const cloudCurrent=cloud?.status==='connected'&&cloud.checksum===state.currentDataHash&&cloud.revision===state.dataRevision;
+    const manualCurrent=!state.metadataInvalid&&!state.dirtySinceBackup&&state.lastBackupHash===state.currentDataHash&&state.lastBackedUpRevision===state.dataRevision;
+    const times=[state.lastBackupAt,cloud?.lastVerifiedAt].map(x=>Date.parse(x)).filter(x=>Number.isFinite(x)&&x<=backupStateManager.now());
+    const last=times.length?Math.max(...times):NaN;
+    return {state,cloudCurrent,manualCurrent,overdue:!cloudCurrent&&!manualCurrent&&(!Number.isFinite(last)||backupStateManager.now()-last>=24*60*60*1000)};
   }
-  function requestBackupGrace(){const required=$('backup-required-dialog'),dialog=$('backup-grace-dialog');if(required.open)required.close();if(!dialog.open)dialog.showModal()}
-  function cancelBackupGrace(){const dialog=$('backup-grace-dialog');if(dialog.open)dialog.close();refreshBackupAccess()}
-  function confirmBackupGrace(){const result=backupStateManager.grantGrace();if(!result.ok){$('backup-grace-dialog').close();refreshBackupAccess();return false}$('backup-grace-dialog').close();if($('backup-required-dialog').open)$('backup-required-dialog').close();refreshBackupAccess();return true}
+  function renderBackupReminder(){const reminder=$('backup-reminder');if(!reminder)return;try{const c=backupCoverage();reminder.hidden=planStorageState.locked||!hasStoredBusinessData()||c.cloudCurrent||c.manualCurrent;reminder.querySelector('span').textContent=c.overdue?'超过24小时未完成可靠备份，请检查云连接或下载完整 JSON；本地记账仍可继续。':'本地有待备份内容，联网后将自动重试；也可下载完整 JSON。'}catch(error){reminder.hidden=true}}
+  function refreshBackupAccess(){
+    let c;try{c=backupCoverage()}catch(error){return}
+    const box=$('backup-safety-status'),title=$('backup-safety-title'),detail=$('backup-safety-detail');box.classList.remove('pending','required');
+    if(c.cloudCurrent){title.textContent='数据安全 · 当前内容已在云端校验';detail.textContent='本地记账可继续；人工 JSON 备份可另行保存。'}
+    else if(c.manualCurrent){title.textContent='数据安全 · 当前内容已完成人工备份';detail.textContent=`人工确认：${recentBackupLabel(c.state.lastBackupAt)}`}
+    else if(!hasStoredBusinessData()){title.textContent='数据安全 · 尚无业务记录';detail.textContent='建立记录后自动尝试云备份。'}
+    else{box.classList.add(c.overdue?'required':'pending');title.textContent=c.overdue?'数据安全 · 长时间未完成备份':'数据安全 · 本地内容待备份';detail.textContent='本地保存可继续；请检查云连接或下载完整 JSON 作为备用。'}
+    renderBackupReminder();if(backupBlockTimer)clearTimeout(backupBlockTimer);backupBlockTimer=setTimeout(refreshBackupAccess,60000);backupBlockTimer?.unref?.();
+  }
   function setBackupDirty(dirty){if(planStorageState.locked)return false;if(dirty)trackedSetItem(BACKUP_DIRTY_KEY,'1');else trackedRemoveItem(BACKUP_DIRTY_KEY);renderBackupReminder();return true}
   let cloudBackup=null;
   function recordSuccessfulBusinessWrite(raw){
@@ -1040,7 +1020,6 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   }
 
   function selectPanel(name){
-    if(name==='customers'&&backupAccessBlocked())return false;
     document.querySelectorAll('.nav [data-panel]').forEach(item=>item.classList.toggle('active',item.dataset.panel===name));
     document.querySelectorAll('.panel').forEach(panel=>panel.classList.toggle('active',panel.id===name+'-panel'));return true;
   }
@@ -1095,16 +1074,9 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   $('open-backup').addEventListener('click',openBackupDialog);
   $('backup-reminder-action').addEventListener('click',openBackupDialog);
   $('close-backup').addEventListener('click',()=>{$('backup-dialog').close();refreshBackupAccess()});
-  $('required-backup-now').addEventListener('click',()=>{$('backup-required-dialog').close();openBackupDialog()});
-  $('request-backup-grace').addEventListener('click',requestBackupGrace);
-  $('cancel-backup-grace').addEventListener('click',cancelBackupGrace);
-  $('confirm-backup-grace').addEventListener('click',confirmBackupGrace);
-  $('backup-required-dialog').addEventListener('cancel',event=>event.preventDefault());
-  $('backup-grace-dialog').addEventListener('cancel',event=>event.preventDefault());
-  $('backup-dialog').addEventListener('cancel',event=>{if(backupStateManager.shouldBlockBackup())event.preventDefault()});
   $('copy-settlement').addEventListener('click',()=>copyPlain('settlement-message','copy-settlement','settlement-status'));
   $('cancel-waiver').addEventListener('click',()=>$('waiver-dialog').close());
-  $('payment-waiver').addEventListener('click',()=>{if(!backupAccessBlocked())openWaiverDialog($('payment-plan-id').value,Number($('payment-term-index').value))});
+  $('payment-waiver').addEventListener('click',()=>{openWaiverDialog($('payment-plan-id').value,Number($('payment-term-index').value))});
   $('waiver-form').addEventListener('submit',event=>{
     event.preventDefault();if(!ensureStorageWritable())return;
     const plan=plans.find(p=>p.id===$('waiver-plan-id').value);if(!plan)return;
@@ -1133,7 +1105,6 @@ window.testingSessionStorage=scoped(window.sessionStorage);
   });
   document.addEventListener('click',event=>{
     const button=event.target.closest('button');if(!button)return;
-    if((button.dataset.editPlan||button.dataset.deletePlan||button.dataset.receive||button.dataset.editPayment||button.dataset.undoPayment||button.dataset.waivePlan||button.dataset.reverseWaiver)&&backupAccessBlocked())return;
     if(button.dataset.viewSnapshot){previewSnapshot(button.dataset.viewSnapshot);return}
     if(button.dataset.scroll)$(button.dataset.scroll).scrollIntoView({behavior:'smooth'});
     if(button.dataset.settlePlan)openSettlementDialog(button.dataset.settlePlan);
@@ -1310,6 +1281,7 @@ window.testingSessionStorage=scoped(window.sessionStorage);
       return {text:raw,revision:backupStateManager.snapshot().dataRevision,schemaVersion:JSON.parse(raw).schemaVersion||1};
     },onChange:state=>{
       const labels={'not-connected':'未连接','pending':'本地数据待云备份','failed':'云备份失败，稍后重试；本地保存有效','connected':'当前内容已在云端校验'};
+      refreshBackupAccess();
       $('cloud-status').textContent=`${labels[state.status]}${state.reason==='payload-too-large'?'（完整包超过16MB支持范围，请保留人工备份）':state.reason==='backup-quota-full'?'（云备份空间已满，请保留人工备份并处理容量）':''} · 本地版本 ${backupStateManager.snapshot().dataRevision} · 已校验本地版本 ${state.revision??'未知'}${state.snapshotRevision!==undefined&&state.snapshotRevision!==state.revision?' · 复用相同内容快照（原版本 '+state.snapshotRevision+'）':''} · 快照备份时间 ${cloudLocalTime(state.lastSuccessfulAt)}（手机本地时间） · 本次校验 ${cloudLocalTime(state.lastVerifiedAt)}${state.checksum?' · '+state.checksum.slice(7,19):''}`;
     }
   });
