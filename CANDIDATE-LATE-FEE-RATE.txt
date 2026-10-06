@@ -1,0 +1,6 @@
+candidate=late-fee-rate-supplement
+source_repo=hckleodj/car-loan-toolbox
+source_commit=c0a50cf65160ca574bd270e394ab0dfe58abafc9
+baseline=5639c6289fab90382de2f67155f2ef7ae6623546
+cloud_backup=disabled-in-preview
+fixture=fictitious-only

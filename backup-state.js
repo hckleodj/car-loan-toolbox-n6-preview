@@ -93,7 +93,7 @@
 
   class BackupStateManager {
     constructor(options = {}) {
-      this.storage = options.storage || globalThis.testingLocalStorage;
+      this.storage = options.storage || globalThis.localStorage;
       this.stateKey = options.stateKey || STATE_KEY;
       this.planKey = options.planKey || PLAN_KEY;
       this.legacyDirtyKey = options.legacyDirtyKey || LEGACY_DIRTY_KEY;

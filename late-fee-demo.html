@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>违约金后补机制候选验收</title>
+<body style="font-family:system-ui;padding:24px;line-height:1.6"><h2>正在准备隔离候选测试数据…</h2><p>本页只写入公开预览站点的虚构数据，不接触正式站点数据。</p>
+<script>
+const ordinary={id:"demo-ordinary",name:"测试-可后补",plate:"测A00001",vehicle:"测试车辆A",vehiclePrice:120000,downPaymentRate:20,depositMonths:1,monthlyRate:1,loanAmount:96000,amount:4960,dueDay:5,rate:0,startDate:"2026-08-05",totalTerms:24,completedTerms:0,openingCompletedTerms:0,notes:"虚构候选验收数据",payments:[{id:"old-ordinary",date:"2026-08-15",total:1000,principal:1000,lateFee:0,startTermIndex:0,allocations:[{termIndex:0,principal:1000}]}]};
+const locked={id:"demo-locked",name:"测试-已有违约金",plate:"测A00002",vehicle:"测试车辆B",vehiclePrice:120000,downPaymentRate:20,depositMonths:1,monthlyRate:1,loanAmount:96000,amount:4960,dueDay:5,rate:0.005,startDate:"2026-08-05",totalTerms:24,completedTerms:0,openingCompletedTerms:0,notes:"虚构锁定样本",payments:[{id:"old-fee",date:"2026-08-15",total:1001,principal:1000,batteryRent:0,lateFee:1,startTermIndex:0,allocationVersion:2,allocations:[{termIndex:0,principal:1000,lateFee:1}]}]};
+["lateFeePaymentPlansV1","dajinBackupStateV1","dajinLocalSnapshotsV1","lateFeeBackupDirtyV1","dajinCloudAuthV1"].forEach(k=>localStorage.removeItem(k));
+localStorage.setItem("lateFeePaymentPlansV1",JSON.stringify([ordinary,locked]));
+localStorage.setItem("lateFeeBackupDirtyV1","1");
+location.replace("./?candidate=late-fee-rate-c0a50cf");
+</script>

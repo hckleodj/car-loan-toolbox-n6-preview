@@ -1,0 +1,1 @@
+window.DajinCloudConfig=Object.freeze({});

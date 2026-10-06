@@ -23,7 +23,7 @@
 
   class LocalSnapshotManager {
     constructor(options = {}) {
-      this.storage = options.storage || globalThis.testingLocalStorage;
+      this.storage = options.storage || globalThis.localStorage;
       this.storageKey = options.storageKey || SNAPSHOTS_KEY;
       this.maxSnapshots = options.maxSnapshots || MAX_SNAPSHOTS;
       this.hashText = options.hashText;

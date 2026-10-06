@@ -1,4 +1,21 @@
-(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;if(root)root.InstallmentLedger=api})(typeof globalThis!=='undefined'?globalThis:this,function(){
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-TS8qr8KQQZ6A3/I3mGSaWB6I22khWWlrzVt+jWuPkyQ=' 'sha256-hhe57+SkJGwIBm1lbR0ptlWjQ0Ia31mvttWveopwtVo=' 'sha256-hbgkEAAoJi4gupdPs5FvFwkIPO4kqa0k4WNvk7zl3oY=' 'sha256-959Y6rU/e1c9JKeXOrrNbFZ2usXyuLahmPiariCPYL8='; style-src 'unsafe-inline'; connect-src https://poqqmberqxhibmadvbiq.supabase.co/auth/v1/token https://poqqmberqxhibmadvbiq.supabase.co/auth/v1/user; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>正式迁移前只读预检</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:24px auto;padding:0 18px;line-height:1.6}input:not([type=checkbox]),button{box-sizing:border-box;width:100%;padding:12px;margin:8px 0;font-size:16px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f3f5;padding:14px}label{display:block}small{display:block;color:#555}</style></head>
+<body><h1>正式迁移前只读预检</h1>
+<p>请在平时记账的 OPPO 系统浏览器打开。只读取本机数据并验证正式账户，不上传客户数据，不执行迁移。</p>
+<p>目标项目：<strong>poqqmberqxhibmadvbiq</strong><small>https://poqqmberqxhibmadvbiq.supabase.co</small></p>
+<form id="preview-form">
+<label>正式项目 Publishable key<input name="key" required autocomplete="off" spellcheck="false"></label>
+<label>正式业务账户邮箱<input name="email" type="email" required autocomplete="off"></label>
+<label>正式业务账户密码<input name="password" type="password" required autocomplete="off"></label>
+<label><input name="confirm" type="checkbox" required>确认使用正式业务账户，本次只做预览</label>
+<button id="run">验证身份并只读预览</button></form>
+<pre id="result" aria-live="polite">尚未执行。打开此页不会读取客户数据。</pre>
+<button id="save" type="button" hidden>下载预检摘要（不含客户明细）</button>
+<p>下载摘要后请人工核对数量。摘要记录不代表正式迁移授权；最新 JSON 备份请保留在手机，不上传到聊天。</p>
+<script>(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;if(root)root.InstallmentLedger=api})(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
   const cents=value=>Math.round(Number(value)*100);
   const yuan=value=>value/100;
@@ -97,7 +114,7 @@
         for(const w of plan.lateFeeWaivers){if(typeof w.id!=='string'||!/^[A-Za-z0-9._:-]+$/.test(w.id)||ids.has(w.id)||!Number.isInteger(w.termIndex)||w.termIndex<0||w.termIndex>=Number(plan.totalTerms)||!amount(w.amount)||Number(w.amount)<=0||typeof w.reason!=='string'||!w.reason.trim())return false;ids.add(w.id);day(w.date);if(w.reversedAt&&day(w.reversedAt)<day(w.date))return false}
         checkWaivers(plan);
       }
-      for(const p of plan.payments||[]){if(!validChannelCost(p))return false;if(p.allocationVersion!==undefined&&p.allocationVersion!==2)return false;if(p.allocationVersion!==2)continue;
+      for(const p of plan.payments||[]){if(p.allocationVersion!==undefined&&p.allocationVersion!==2)return false;if(p.allocationVersion!==2)continue;
         day(p.date);if(![p.total,p.principal,p.batteryRent,p.lateFee].every(amount))return false;
         if(!Number.isInteger(p.startTermIndex)||p.startTermIndex<0||p.startTermIndex>=Number(plan.totalTerms))return false;
         const sums={principal:0,batteryRent:0,lateFee:0},seen=new Set();
@@ -107,39 +124,7 @@
       }return true;
     }catch(e){return false}
   }
-  // Channel costs never participate in repayment allocation or statements.
-  const paymentChannels={CCB:'建行收款码',WECHAT:'微信经营收款',CASH:'现金类渠道'};
-  function channelCost(total,channel,fee){
-    if(!Object.hasOwn(paymentChannels,channel))throw Error('请选择收款渠道。');
-    if(!amount(total)||Number(total)<=0||!amount(fee))throw Error('付款金额和手续费须为有效非负金额，最多两位小数。');
-    const channelFee=channel==='CASH'?0:Number(fee);
-    return {paymentAmount:Number(total),paymentChannel:channel,channelFee,netReceived:yuan(Math.max(cents(total)-cents(channelFee),0))};
-  }
-  function validChannelCost(p){
-    const keys=['paymentAmount','paymentChannel','channelFee','netReceived'];
-    if(keys.every(k=>p[k]===undefined))return true; // Legacy receipts stay untouched.
-    try{if(keys.some(k=>p[k]===undefined)||typeof p.paymentAmount!=='number'||typeof p.channelFee!=='number'||typeof p.netReceived!=='number')return false;
-      const cost=channelCost(p.paymentAmount,p.paymentChannel,p.channelFee);
-      return cents(p.paymentAmount)===cents(p.total)&&p.channelFee===cost.channelFee&&p.netReceived===cost.netReceived;
-    }catch(error){return false}
-  }
-  function suggestedChannelFee(total,channel,settings){
-    if(channel==='CASH')return 0;
-    const rate=settings?.[channel];
-    if(rate===undefined||rate===null)return null;
-    if(!amount(total))return null;
-    return yuan(Math.round(cents(total)*rate/100));
-  }
   function localToday(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`}
-  // Inspect saved history, including reversed waivers; never replay receipts to change a rate.
-  function hasLateFeeHistory(plan){
-    return (plan.payments||[]).some(p=>Number(p.lateFee)>0||(p.allocations||[]).some(a=>Number(a.lateFee)>0))
-      ||Object.keys(plan.legacyLateFeeAllocations||{}).length>0||(plan.lateFeeWaivers||[]).length>0;
-  }
-  function assertRateChange(existing,rate){
-    if(!Number.isFinite(Number(rate))||Number(rate)<0)throw Error('参考日违约金比例须为非负数字。');
-    if(existing&&Number(rate)!==Number(existing.rate)&&hasLateFeeHistory(existing))throw Error('已有滞纳金收款、分配或减免历史（含已撤销记录），不能直接修改参考日违约金比例，请先核对历史账务。');
-  }
   function configure(plan,existing,rent,effective,asOf=localToday()){
     if(!amount(rent))throw Error('月租电费请输入非负金额，最多2位小数。');
     if(!Number.isInteger(effective)||effective<0||effective>=Number(plan.totalTerms))throw Error('租电费生效期须在合同期数内。');
@@ -160,7 +145,7 @@
     freezeLegacyFees(plan);
     plan.batteryMonthlyRent=Number(rent);plan.batteryRentEffectiveTermIndex=effective;plan.batteryRentByTerm=values;
   }
-  function receive(plan,{id,date,total,lateFee=0,startTermIndex,automatic=true},asOf){
+  function receive(plan,{id,date,total,lateFee=0,startTermIndex,automatic=false},asOf){
     if(!amount(total)||Number(total)<=0||!amount(lateFee)||Number(lateFee)>Number(total))throw Error('到账总额及滞纳金须为有效的非负两位小数金额。');
     if(day(date)>day(asOf))throw Error('实际收款日期不能晚于今天。');
     if(!Number.isInteger(startTermIndex)||startTermIndex<opening(plan)||startTermIndex>=Number(plan.totalTerms))throw Error('收款期数无效。');
@@ -168,12 +153,10 @@
     const oldIndex=(copy.payments||[]).findIndex(p=>p.id===id);copy.payments=(copy.payments||[]).filter(p=>p.id!==id);if(copy.legacyLateFeeAllocations)delete copy.legacyLateFeeAllocations[id];
     const entries=new Map();const entry=i=>{if(!entries.has(i))entries.set(i,{termIndex:i,principal:0,batteryRent:0,lateFee:0});return entries.get(i)};
     let left=cents(total)-cents(lateFee);
-    // Resolve from saved balances after removing only the receipt being edited.
-    // The clicked term and today's month must never choose the FIFO starting point.
-    const dueRows=statement(copy,date);
-    const first=dueRows.findIndex((r,i)=>{const b=base(copy,i);return b.contractRemaining>0||b.batteryRemaining>0||r.remainingLateFee>0});
-    startTermIndex=first>=0?Math.max(opening(copy),first):Number(copy.totalTerms);
     if(automatic){
+      const dueRows=statement(copy,date);
+      const first=dueRows.findIndex((r,i)=>{const b=base(copy,i);return b.contractRemaining>0||b.batteryRemaining>0||r.remainingLateFee>0});
+      if(first>=0)startTermIndex=Math.max(opening(copy),first);
       const view={...copy,payments:[...copy.payments,{id,date,allocationVersion:2,allocations:[]}]},temporary=view.payments[view.payments.length-1];
       for(let i=startTermIndex;i<Number(copy.totalTerms)&&left>0;i++){
         const b=base(copy,i),contract=Math.min(left,b.contractRemaining);left-=contract;const rent=Math.min(left,b.batteryRemaining);left-=rent;
@@ -211,5 +194,85 @@
     if(copy.legacyLateFeeAllocations)delete copy.legacyLateFeeAllocations[id];
     checkWaivers(copy);recompute(copy);return copy;
   }
-  return {hasLateFeeHistory,assertRateChange,paymentChannels,channelCost,validChannelCost,suggestedChannelFee,cents,yuan,amount,day,dueDay,opening,battery,base,accrued,statement,recompute,validate,configure,receive,freezeLegacyFees,undo,waive,reverseWaiver};
+  return {cents,yuan,amount,day,dueDay,opening,battery,base,accrued,statement,recompute,validate,configure,receive,freezeLegacyFees,undo,waive,reverseWaiver};
 });
+</script>
+<script>  function validBackupPlan(plan){
+    const safeId=value=>typeof value==='string'&&/^[A-Za-z0-9._:-]+$/.test(value),validPayments=Array.isArray(plan?.payments)&&(plan.payments||[]).every(payment=>safeId(payment.id)&&Number.isFinite(Number(payment.total))&&Number.isFinite(Number(payment.lateFee))&&Number.isFinite(Number(payment.principal))&&Array.isArray(payment.allocations));
+    return plan&&typeof plan==='object'&&window.InstallmentLedger?.validate(plan)&&safeId(plan.id)&&typeof plan.name==='string'&&Number.isFinite(Number(plan.amount))&&Number(plan.amount)>0&&Number.isInteger(Number(plan.totalTerms))&&Number(plan.totalTerms)>0&&Number.isInteger(Number(plan.completedTerms))&&Number(plan.completedTerms)>=0&&(plan.depositMonths===undefined||(Number.isInteger(Number(plan.depositMonths))&&Number(plan.depositMonths)>=0&&Number(plan.depositMonths)<=120))&&typeof plan.startDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(plan.startDate)&&(plan.payments===undefined||validPayments);
+  }
+</script>
+<script>(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;if(root)root.DajinMigrationPreflight=api})(typeof globalThis!=='undefined'?globalThis:this,function(){
+ 'use strict';
+ const TEST='mydxxtygovjohfnerrxf',PRODUCTION='poqqmberqxhibmadvbiq';
+ const keys=['lateFeePaymentPlansV1','dajinBackupStateV1','lateFeeBackupDirtyV1','dajinLocalSnapshotsV1'];
+ function target(url){const u=new URL(url);if(u.protocol!=='https:'||u.username||u.password||u.port||u.search||u.hash||!['','/'].includes(u.pathname))throw Error('project-origin-required');const ref=u.hostname.split('.')[0];if(ref===TEST)throw Error('test-project-prohibited');if(u.hostname!==PRODUCTION+'.supabase.co')throw Error('unapproved-production-project');return {projectId:ref,url:u.origin}}
+ async function preview({storage,validatePlan,hashText,projectUrl,identity,sourceOrigin,expectedSourceOrigin}){
+  const project=target(projectUrl);
+  if(!sourceOrigin||sourceOrigin!==expectedSourceOrigin||sourceOrigin!=='https://hckleodj.github.io')throw Error('formal-source-origin-required');
+  if(!identity||typeof identity.uid!=='string'||!identity.uid||identity.projectId!==project.projectId||identity.verified!==true)throw Error('verified-production-identity-required');
+  if(typeof validatePlan!=='function'||typeof hashText!=='function'||typeof storage?.getItem!=='function')throw Error('read-only-dependencies-required');
+  const before=keys.map(k=>storage.getItem(k));let plans,state;
+  try{plans=JSON.parse(before[0]);state=JSON.parse(before[1])}catch{throw Error('corrupt-source-or-backup-state')}
+  if(!Array.isArray(plans)||!plans.length)throw Error('nonempty-plans-required');
+  if(!state||!Number.isSafeInteger(state.dataRevision)||state.dataRevision<0)throw Error('valid-revision-required');
+  const invalidPlanIndices=[],duplicatePlanIds=[],duplicateReceiptIds=[],seen=new Set();let payments=0,allocations=0;
+  for(const [index,p] of plans.entries()){
+   let valid=false;try{valid=!!validatePlan(p)}catch{}if(!valid)invalidPlanIndices.push(index);
+   if(seen.has(p?.id))duplicatePlanIds.push(p.id);seen.add(p?.id);
+   const receipts=new Set();for(const r of Array.isArray(p?.payments)?p.payments:[]){payments++;if(receipts.has(r?.id))duplicateReceiptIds.push({planIndex:index,receiptId:r.id});receipts.add(r?.id);allocations+=Array.isArray(r?.allocations)?r.allocations.length:0}
+  }
+  const checksum=await hashText(JSON.stringify(plans));if(!/^sha256:[a-f0-9]{64}$/.test(checksum))throw Error('invalid-checksum');
+  if(keys.some((k,i)=>storage.getItem(k)!==before[i]))throw Error('source-changed-during-preview');
+  return {mode:'read-only-no-cloud-write',project,identity:{uid:identity.uid,projectId:identity.projectId},sourceOrigin,counts:{customers:plans.length,contracts:plans.length,payments,allocations},revision:state.dataRevision,checksum,duplicatePlanIds,duplicateReceiptIds,invalidPlanIndices,valid:!invalidPlanIndices.length&&!duplicatePlanIds.length&&!duplicateReceiptIds.length,backupMetadataMatches:state.lastBackupHash===checksum&&state.lastBackedUpRevision===state.dataRevision&&state.dirtySinceBackup===false,formalBackupFileManuallyConfirmed:false,migrationAuthorized:false};
+ }
+ return {target,preview};
+});
+</script>
+<script>(()=>{
+  'use strict';
+  const origin='https://hckleodj.github.io',pathname='/late-fee-calculator-cn/formal-migration-preflight.html';
+  const ref='poqqmberqxhibmadvbiq',url='https://'+ref+'.supabase.co',smokeIds=["da4c449a-497c-4a42-bfe3-4131d2de4415","ec3ecaef-f41d-483b-8402-8d3ae691d16d"];
+  const form=document.getElementById('preview-form'),button=document.getElementById('run'),out=document.getElementById('result'),save=document.getElementById('save');
+  let summary=null;
+  if(location.origin!==origin||location.pathname!==pathname||!crypto.subtle){
+    button.disabled=true;out.textContent='停止：请在原正式网址的 HTTPS 预检页打开。不要导入或复制客户数据到此页。';return;
+  }
+  async function authRequest(path,key,options={}){
+    const response=await fetch(url+path,{...options,credentials:'omit',cache:'no-store',redirect:'error',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(30000),headers:{apikey:key,...options.headers}});
+    const data=await response.json();
+    if(!response.ok)throw Error('认证服务返回 HTTP '+response.status+'。请核对正式账户或稍后重试。');
+    return data;
+  }
+  form.onsubmit=async event=>{
+    event.preventDefault();if(button.disabled)return;
+    button.disabled=true;save.hidden=true;summary=null;out.textContent='正在验证账户并生成本机只读摘要……';
+    const key=form.elements.key.value.trim(),email=form.elements.email.value.trim();
+    let password=form.elements.password.value,session=null;
+    form.elements.password.value='';
+    try{
+      if(!form.elements.confirm.checked)throw Error('请确认本次只做预览。');
+      if(!key.startsWith('sb_publishable_'))throw Error('请填写正式项目的 Publishable key。');
+      session=await authRequest('/auth/v1/token?grant_type=password',key,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+      password='';
+      if(!session.access_token||!session.user?.id)throw Error('账户认证未完成。');
+      const user=await authRequest('/auth/v1/user',key,{headers:{Authorization:'Bearer '+session.access_token}});
+      if(!user.id||user.id!==session.user.id)throw Error('无法确认账户身份。');
+      if(smokeIds.includes(user.id))throw Error('这是 smoke 测试账户，请使用独立正式业务账户。');
+      const hashText=async text=>'sha256:'+Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(n=>n.toString(16).padStart(2,'0')).join('');
+      const result=await DajinMigrationPreflight.preview({storage:localStorage,validatePlan:validBackupPlan,hashText,projectUrl:url,identity:{uid:user.id,projectId:ref,verified:true},sourceOrigin:location.origin,expectedSourceOrigin:origin});
+      const {duplicatePlanIds,duplicateReceiptIds,invalidPlanIndices,...rest}=result;
+      summary={...rest,duplicatePlanIdCount:duplicatePlanIds.length,duplicateReceiptIdCount:duplicateReceiptIds.length,invalidPlanCount:invalidPlanIndices.length,checksumDefinition:'SHA-256 of JSON.stringify(parsed lateFeePaymentPlansV1), UTF-8; includes every plan field',generatedAt:new Date().toISOString(),sourcePage:location.pathname};
+      out.textContent=JSON.stringify(summary,null,2);save.hidden=false;
+    }catch(error){
+      out.textContent='停止：'+(error instanceof TypeError?'网络或浏览器请求失败，尚不能确认账户。':error.name==='TimeoutError'?'认证请求超时，请稍后重试。':error.message);
+    }finally{password='';session=null;form.elements.password.value='';button.disabled=false}
+  };
+  save.onclick=()=>{
+    if(!summary)return;
+    const objectUrl=URL.createObjectURL(new Blob([JSON.stringify(summary,null,2)],{type:'application/json'}));
+    const a=document.createElement('a');a.href=objectUrl;a.download='正式迁移只读预检摘要.json';a.click();
+    setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
+  };
+})();
+</script></body></html>
